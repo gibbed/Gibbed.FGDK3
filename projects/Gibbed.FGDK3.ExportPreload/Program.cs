@@ -183,6 +183,12 @@ namespace Gibbed.FGDK3.ExportPreload
             name = $"{name}.ovl";
             using (var input = LoadOverlayFile(name, basePath, zipPath))
             {
+                if (input == null)
+                {
+                    // no file
+                    return;
+                }
+
                 for (int assetType = 0; assetType < assetTypeCount; assetType++)
                 {
                     var data = datas[assetType];
@@ -209,6 +215,7 @@ namespace Gibbed.FGDK3.ExportPreload
             {
                 case 0: return ExportText;
                 case 1: return ExportTextures;
+                case 3: return ExportShapes;
             }
             return null;
         }
@@ -219,6 +226,7 @@ namespace Gibbed.FGDK3.ExportPreload
             {
                 case 0: return ExportText;
                 case 1: return ExportTextures;
+                case 3: return ExportShapes;
             }
             return null;
         }
@@ -251,7 +259,17 @@ namespace Gibbed.FGDK3.ExportPreload
 
             for (int i = 0; i < textureCount; i++)
             {
-                ExportTexture(resourcesHeader.ResourceBytes[2][i * 2][0], input, endian, Path.Combine(outputBasePath, $"texture_{i}"));
+                var textureFlags = resourcesHeader.ResourceBytes[2][i * 2][0];
+                ExportTexture(textureFlags, input, endian, Path.Combine(outputBasePath, $"texture_{i}"));
+            }
+
+            // skip sprite data
+            var spriteCount = input.ReadValueS32(endian);
+            for (int i = 0; i < spriteCount; i++)
+            {
+                var spriteId = input.ReadValueS32(endian);
+                var spriteNameLength = input.ReadValueS32(endian);
+                input.Position += spriteNameLength;
             }
         }
 
@@ -299,6 +317,193 @@ namespace Gibbed.FGDK3.ExportPreload
             }
         }
 
+        private static void ExportShapes(PreloadFile.OverlayData data, Stream input, Endian endian, string outputBasePath)
+        {
+            var resourcesHeader = ResourcesHeader.Read(input, endian);
+
+            for (int i = 0; i < data.ElementCount; i++)
+            {
+                var shapeHeaderBytes = resourcesHeader.ResourceBytes[0][1 + (i * 2)];
+                ShapeHeader shapeHeader;
+                using (var temp = new MemoryStream(shapeHeaderBytes, false))
+                {
+                    shapeHeader = ReadShapeHeader(temp, endian);
+                }
+                ExportShape(shapeHeader, input, endian, Path.Combine(outputBasePath, $"shape_{i}"));
+            }
+        }
+
+        private struct ShapeHeader
+        {
+            public float Unknown0;
+            public float Unknown1;
+            public float Unknown2;
+            public float Unknown3;
+            public uint Unknown4;
+            public uint Unknown5;
+            public uint Unknown6;
+            public int LODCount;
+            public int Unknown8Count;
+            public uint Unknown9;
+            public uint Unknown10;
+            public uint Unknown11;
+            public uint Unknown12;
+            public uint Unknown13;
+            public uint Unknown14;
+            public uint Unknown15;
+            public uint Unknown16;
+        }
+
+
+        private static ShapeHeader ReadShapeHeader(Stream input, Endian endian)
+        {
+            ShapeHeader instance;
+            instance.Unknown0 = input.ReadValueF32(endian);
+            instance.Unknown1 = input.ReadValueF32(endian);
+            instance.Unknown2 = input.ReadValueF32(endian);
+            instance.Unknown3 = input.ReadValueF32(endian);
+            instance.Unknown4 = input.ReadValueU32(endian);
+            instance.Unknown5 = input.ReadValueU32(endian);
+            instance.Unknown6 = input.ReadValueU32(endian);
+            instance.LODCount = input.ReadValueS32(endian);
+            instance.Unknown8Count = input.ReadValueS32(endian);
+            instance.Unknown9 = input.ReadValueU32(endian);
+            instance.Unknown10 = input.ReadValueU32(endian);
+            instance.Unknown11 = input.ReadValueU32(endian);
+            instance.Unknown12 = input.ReadValueU32(endian);
+            instance.Unknown13 = input.ReadValueU32(endian);
+            instance.Unknown14 = input.ReadValueU32(endian);
+            instance.Unknown15 = input.ReadValueU32(endian);
+            instance.Unknown16 = input.ReadValueU32(endian);
+            return instance;
+        }
+
+        private static void ExportShape(ShapeHeader header, Stream input, Endian endian, string outputBasePath)
+        {
+            var unknown2 = new uint[header.Unknown8Count];
+            for (int i = 0; i < header.Unknown8Count; i++)
+            {
+                unknown2[i] = input.ReadValueU32(endian);
+            }
+
+            for (int i = 0; i < header.LODCount; i++)
+            {
+                using (var writer = new StringWriter())
+                {
+                    ExportShapeObject(input, endian, 0, writer);
+                    File.WriteAllText($"{outputBasePath}_lod{i}.obj", writer.ToString(), Encoding.UTF8);
+                }
+            }
+        }
+
+        private static int ExportShapeObject(Stream input, Endian endian, int baseIndex, TextWriter writer)
+        {
+            var unknown1_0 = input.ReadValueS32(endian);
+            var meshCount = input.ReadValueS32(endian);
+            var unknown1_2 = input.ReadValueU32(endian);
+
+            writer.WriteLine($"#unknown1_2={unknown1_2}");
+
+            var unknown1_3 = new uint[unknown1_0];
+            for (int i = 0; i < unknown1_0; i++)
+            {
+                unknown1_3[i] = input.ReadValueU32(endian);
+                writer.WriteLine($"#unknown1_3[{i}]={unknown1_3[i]}");
+            }
+
+            for (int i = 0; i < meshCount; i++)
+            {
+                writer.WriteLine($"o mesh_{i}");
+                baseIndex = ExportShapeMesh(input, endian, baseIndex, writer);
+            }
+
+            return baseIndex;
+        }
+
+        private static int ExportShapeMesh(Stream input, Endian endian, int baseVertexIndex, TextWriter writer)
+        {
+            var unknown1_4_0 = input.ReadValueS16(endian);
+            var triangleStripLengthCount = input.ReadValueU16(endian);
+            var indexCount = input.ReadValueU16(endian);
+            var weightedVertexCount = input.ReadValueU16(endian);
+            var unknown1_4_4 = input.ReadValueU32(endian); // format?
+
+            var triangleStripLengths = new ushort[triangleStripLengthCount];
+            for (int i = 0; i < triangleStripLengthCount; i++)
+            {
+                triangleStripLengths[i] = input.ReadValueU16(endian);
+            }
+
+            var indices = new ushort[indexCount];
+            for (int i = 0; i < indexCount; i++)
+            {
+                indices[i] = input.ReadValueU16(endian);
+            }
+
+            if (((indexCount + triangleStripLengthCount) & 1) != 0)
+            {
+                // padding
+                input.Position += 2;
+            }
+
+            var startVertexIndex = 1 + baseVertexIndex;
+
+            writer.WriteLine($"#unknown1_4_0={unknown1_4_0}");
+
+            for (int i = 0; i < weightedVertexCount; i++, baseVertexIndex++)
+            {
+                var vx = input.ReadValueF32(endian);
+                var vy = input.ReadValueF32(endian);
+                var vz = input.ReadValueF32(endian);
+                writer.WriteLine($"v {vx} {vy} {vz}");
+
+                if (unknown1_4_4 == 0x411C)
+                {
+                    var v8 = input.ReadValueU32(endian);
+                    var v9 = input.ReadValueF32(endian);
+                    var v10 = input.ReadValueF32(endian);
+                    var v11 = input.ReadValueF32(endian);
+                    var v12 = input.ReadValueF32(endian);
+
+                    writer.WriteLine($"# {v8} {v9} {v10} {v11} {v12}");
+                }
+
+                // TODO(gibbed): need to fix float output, Blender doesn't like scientific notation
+                var nx = input.ReadValueF32(endian);
+                var ny = input.ReadValueF32(endian);
+                var nz = input.ReadValueF32(endian);
+                writer.WriteLine($"#vn {nx} {ny} {nz}");
+
+                var uvx = input.ReadValueF32(endian);
+                var uvy = input.ReadValueF32(endian);
+                writer.WriteLine($"vt {uvx} {uvy}");
+            }
+
+            // decompose triangle strips
+            var index = 0;
+            foreach (var stripLength in triangleStripLengths)
+            {
+                for (int i = 0; i < stripLength - 2; i++)
+                {
+                    var a = startVertexIndex + indices[index + i + 0];
+                    var b = startVertexIndex + indices[index + i + 1];
+                    var c = startVertexIndex + indices[index + i + 2];
+
+                    if ((i & 1) != 0)
+                    {
+                        var temp = b;
+                        b = c;
+                        c = temp;
+                    }
+
+                    writer.WriteLine($"f {a}/{a}/{a} {b}/{b}/{b} {c}/{c}/{c}");
+                }
+                index += stripLength;
+            }
+
+            return baseVertexIndex;
+        }
+
         private static Stream LoadOverlayFile(string name, string basePath, string zipPath)
         {
             var path = Path.Combine(basePath, name);
@@ -320,7 +525,8 @@ namespace Gibbed.FGDK3.ExportPreload
                 }
             }
 
-            throw new InvalidOperationException($"'{name}' does not exist in an expected location");
+            //throw new InvalidOperationException($"'{name}' does not exist in an expected location");
+            return null;
         }
 
         private static List<PreloadFile.Overlay> GetOverlays(PreloadFile.UnknownType2 root)
