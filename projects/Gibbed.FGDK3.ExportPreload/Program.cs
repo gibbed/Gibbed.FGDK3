@@ -26,6 +26,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using Gibbed.FGDK3.FileFormats;
 using Gibbed.IO;
 using ICSharpCode.SharpZipLib.Zip;
@@ -206,6 +207,7 @@ namespace Gibbed.FGDK3.ExportPreload
         {
             switch (assetType)
             {
+                case 0: return ExportText;
                 case 1: return ExportTextures;
             }
             return null;
@@ -215,9 +217,31 @@ namespace Gibbed.FGDK3.ExportPreload
         {
             switch (assetType)
             {
+                case 0: return ExportText;
                 case 1: return ExportTextures;
             }
             return null;
+        }
+
+        private static void ExportText(PreloadFile.OverlayData data, Stream input, Endian endian, string outputBasePath)
+        {
+            var size = input.ReadValueS32(endian);
+            var lines = new List<string>();
+            using (var temp = input.ReadToMemoryStream(size))
+            {
+                while (temp.Position < temp.Length)
+                {
+                    var line = temp.ReadStringZ(Encoding.Default);
+                    lines.Add(line);
+                }
+            }
+
+            var outputPath = Path.Combine(outputBasePath, "text.txt");
+
+            var outputParentPath = Path.GetDirectoryName(outputPath);
+            Directory.CreateDirectory(outputParentPath);
+
+            File.WriteAllLines(outputPath, lines, Encoding.UTF8);
         }
 
         private static void ExportTextures(PreloadFile.OverlayData data, Stream input, Endian endian, string outputBasePath)
