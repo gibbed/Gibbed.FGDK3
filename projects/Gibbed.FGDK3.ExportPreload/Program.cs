@@ -337,8 +337,12 @@ namespace Gibbed.FGDK3.ExportPreload
             {
                 var abgr = palette[i];
                 uint b = (abgr & 0x00FF0000) >> 16;
+                uint g = (abgr & 0x0000FF00);
                 uint r = (abgr & 0x000000FF) << 16;
-                var argb = (int)((abgr & 0xFF00FF00) | b | r);
+                uint a = (abgr & 0xFF000000);
+                // alpha 128 -> 255, might be wrong
+                a = (uint)(byte)((a >> 24) / 128.0 * 255) << 24;
+                var argb = (int)(a | r | g | b);
                 bitmapPalette.Entries[i] = Color.FromArgb(argb);
             }
             bitmap.Palette = bitmapPalette;
