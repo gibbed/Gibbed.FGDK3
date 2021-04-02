@@ -86,16 +86,16 @@ namespace Gibbed.FGDK3.FileFormats
 
             Overlay instance;
             instance.Id = id;
-            instance.Segment0 = segment0;
-            instance.Segment1 = segment1;
-            instance.Segment2 = segment2;
-            instance.Segment3 = segment3;
+            instance.AssetGroup0 = segment0;
+            instance.AssetGroup1 = segment1;
+            instance.AssetGroup2 = segment2;
+            instance.AssetGroup3 = segment3;
             return instance;
         }
 
-        private static OverlayData[] ReadOverlayDataArray(int assetTypeCount, Stream input, Endian endian)
+        private static OverlayAssetGroup[] ReadOverlayDataArray(int assetTypeCount, Stream input, Endian endian)
         {
-            var instance = new OverlayData[assetTypeCount];
+            var instance = new OverlayAssetGroup[assetTypeCount];
             for (int i = 0; i < assetTypeCount; i++)
             {
                 instance[i] = ReadOverlayData(input, endian);
@@ -103,7 +103,7 @@ namespace Gibbed.FGDK3.FileFormats
             return instance;
         }
 
-        private static OverlayData ReadOverlayData(Stream input, Endian endian)
+        private static OverlayAssetGroup ReadOverlayData(Stream input, Endian endian)
         {
             var elementCount = input.ReadValueU16(endian);
             var unknownCount = input.ReadValueU16(endian);
@@ -113,8 +113,8 @@ namespace Gibbed.FGDK3.FileFormats
                 unknowns[i] = ReadOverlayUnknown(input, endian);
             }
 
-            OverlayData instance;
-            instance.ElementCount = elementCount;
+            OverlayAssetGroup instance;
+            instance.AssetCount = elementCount;
             instance.Unknowns = unknowns;
             return instance;
         }
@@ -165,15 +165,15 @@ namespace Gibbed.FGDK3.FileFormats
         public struct Overlay
         {
             public byte Id;
-            public OverlayData[] Segment0;
-            public OverlayData[] Segment1;
-            public OverlayData[] Segment2;
-            public OverlayData[] Segment3;
+            public OverlayAssetGroup[] AssetGroup0;
+            public OverlayAssetGroup[] AssetGroup1;
+            public OverlayAssetGroup[] AssetGroup2;
+            public OverlayAssetGroup[] AssetGroup3;
         }
 
-        public struct OverlayData
+        public struct OverlayAssetGroup
         {
-            public ushort ElementCount;
+            public ushort AssetCount;
             public OverlayUnknown[] Unknowns;
 
         }
