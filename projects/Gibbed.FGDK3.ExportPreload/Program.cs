@@ -226,7 +226,7 @@ namespace Gibbed.FGDK3.ExportPreload
             {
                 case 0: return ExportText;
                 case 1: return ExportTextures;
-                case 3: return ExportShapes;
+                case 2: return ExportShapes;
             }
             return null;
         }
@@ -603,7 +603,12 @@ namespace Gibbed.FGDK3.ExportPreload
                     writer.WriteLine("  </visual_scene></library_visual_scenes><scene><instance_visual_scene url=\"#Scene\"/></scene>");
                     writer.WriteLine("</COLLADA>");
 
-                    File.WriteAllText($"{outputBasePath}_lod{i}.dae", writer.ToString(), Encoding.UTF8);
+                    var outputPath = $"{outputBasePath}_lod{i}.dae";
+
+                    var outputParentPath = Path.GetDirectoryName(outputPath);
+                    Directory.CreateDirectory(outputParentPath);
+
+                    File.WriteAllText(outputPath, writer.ToString(), Encoding.UTF8);
                 }
             }
         }
