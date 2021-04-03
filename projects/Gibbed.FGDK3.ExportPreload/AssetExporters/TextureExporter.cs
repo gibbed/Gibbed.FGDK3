@@ -20,10 +20,12 @@
  *    distribution.
  */
 
+using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using Gibbed.FGDK3.FileFormats;
 using Gibbed.IO;
 
@@ -36,63 +38,42 @@ namespace Gibbed.FGDK3.ExportPreload.AssetExporters
             var textureCount = input.ReadValueS32(endian);
             var resourcesHeader = ResourcesHeader.Read(input, endian);
 
+            var textures = new TextureAsset[textureCount];
             for (int i = 0; i < textureCount; i++)
             {
-                var textureFlags = resourcesHeader.ResourceBytes[2][i * 2][0];
-                ExportTexture(textureFlags, input, endian, Path.Combine(outputBasePath, $"texture_{i}"));
+                // TODO(gibbed): actually read the header, this forces LE
+                var textureFlags = (TextureFlags)BitConverter.ToUInt32(resourcesHeader.ResourceBytes[2][i * 2], 0);
+                textures[i] = TextureAsset.Read(textureFlags, input, endian);
             }
 
-            // skip sprite data
             var spriteCount = input.ReadValueS32(endian);
+            var sprites = new (int id, string name)[spriteCount];
             for (int i = 0; i < spriteCount; i++)
             {
                 var spriteId = input.ReadValueS32(endian);
                 var spriteNameLength = input.ReadValueS32(endian);
-                input.Position += spriteNameLength;
-            }
-        }
-
-        private static void ExportTexture(byte flags, Stream input, Endian endian, string outputBasePath)
-        {
-            var colorCount = input.ReadValueS32(endian);
-
-            var paletteA = new uint[colorCount];
-            for (int i = 0; i < colorCount; i++)
-            {
-                paletteA[i] = input.ReadValueU32(endian);
+                var spriteName = input.ReadString(spriteNameLength, true, Encoding.ASCII);
+                sprites[i] = (spriteId, spriteName);
             }
 
-            var paletteB = new uint[colorCount];
-            for (int i = 0; i < colorCount; i++)
+            for (int i = 0; i < textureCount; i++)
             {
-                paletteB[i] = input.ReadValueU32(endian);
-            }
+                var texture = textures[i];
 
-            var width = input.ReadValueS32(endian);
-            var height = input.ReadValueS32(endian);
+                var outputPath = Path.Combine(outputBasePath, $"texture_{i}");
 
-            var mipCount = (flags & 0x40) != 0 ? 1 : 4;
+                var outputParentPath = Path.GetDirectoryName(outputPath);
+                Directory.CreateDirectory(outputParentPath);
 
-            var mipSize = input.ReadValueS32(endian);
-            var mipBytes = input.ReadBytes(mipSize);
+                using (var bitmap = MakeBitmapPalettized(texture.Width, texture.Height, texture.Mips[0], texture.Palette))
+                {
+                    bitmap.Save(outputPath + ".png", ImageFormat.Png);
+                }
 
-            for (int i = 1; i < mipCount; i++)
-            {
-                var additionalMipSize = input.ReadValueS32(endian);
-                input.Position += additionalMipSize;
-            }
-
-            var outputParentPath = Path.GetDirectoryName(outputBasePath);
-            Directory.CreateDirectory(outputParentPath);
-
-            using (var bitmap = MakeBitmapPalettized(width, height, mipBytes, paletteA))
-            {
-                bitmap.Save(outputBasePath + "_a.png", ImageFormat.Png);
-            }
-
-            using (var bitmap = MakeBitmapPalettized(width, height, mipBytes, paletteB))
-            {
-                bitmap.Save(outputBasePath + "_b.png", ImageFormat.Png);
+                using (var bitmap = MakeBitmapPalettized(texture.Width, texture.Height, texture.Mips[0], texture.PaletteDark))
+                {
+                    bitmap.Save(outputPath + "_dark.png", ImageFormat.Png);
+                }
             }
         }
 
