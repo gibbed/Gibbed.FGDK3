@@ -29,7 +29,6 @@ namespace Gibbed.FGDK3.FileFormats
     {
         public Resource[] Resources { get; set; }
         public Dependency[] Dependencies { get; set; }
-
         public byte[][][] ResourceBytes { get; set; }
 
         public static ResourcesHeader Read(Stream input, Endian endian)

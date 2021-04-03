@@ -30,7 +30,7 @@ using NDesk.Options;
 
 namespace Gibbed.FGDK3.ExportPreload
 {
-    internal class Program
+    internal static partial class Program
     {
         private static string GetExecutableName()
         {
@@ -115,7 +115,7 @@ namespace Gibbed.FGDK3.ExportPreload
                 }
             }
 
-            Func<int, Action<PreloadFile.OverlayAssetGroup, Stream, Endian, string>> getExporter;
+            GetAssetExporterDelegate getAssetExporter;
             int assetTypeCount, localizationCount;
             switch (target)
             {
@@ -123,7 +123,7 @@ namespace Gibbed.FGDK3.ExportPreload
                 {
                     assetTypeCount = 11;
                     localizationCount = 11;
-                    getExporter = GetDogsExporter;
+                    getAssetExporter = GetDogsAssetExporter;
                     break;
                 }
 
@@ -131,7 +131,7 @@ namespace Gibbed.FGDK3.ExportPreload
                 {
                     assetTypeCount = 10;
                     localizationCount = 5;
-                    getExporter = GetZooExporter;
+                    getAssetExporter = GetZooAssetExporter;
                     break;
                 }
 
@@ -152,19 +152,19 @@ namespace Gibbed.FGDK3.ExportPreload
 
             foreach (var overlay in GetOverlays(preloadFile.Root))
             {
-                ExportOverlay($"{overlay.Id}", assetTypeCount, getExporter, overlay.AssetGroup0, overlayBasePath, overlayZipPath, outputBasePath, endian);
-                ExportOverlay($"{overlay.Id}d0", assetTypeCount, getExporter, overlay.AssetGroup1, overlayBasePath, overlayZipPath, outputBasePath, endian);
+                ExportOverlay($"{overlay.Id}", assetTypeCount, getAssetExporter, overlay.AssetGroup0, overlayBasePath, overlayZipPath, outputBasePath, endian);
+                ExportOverlay($"{overlay.Id}d0", assetTypeCount, getAssetExporter, overlay.AssetGroup1, overlayBasePath, overlayZipPath, outputBasePath, endian);
                 for (int i = 0; i < localizationCount; i++)
                 {
-                    ExportOverlay($"{overlay.Id}l{i}", assetTypeCount, getExporter, overlay.AssetGroup2, overlayBasePath, overlayZipPath, outputBasePath, endian);
-                    ExportOverlay($"{overlay.Id}d0l{i}", assetTypeCount, getExporter, overlay.AssetGroup3, overlayBasePath, overlayZipPath, outputBasePath, endian);
+                    ExportOverlay($"{overlay.Id}l{i}", assetTypeCount, getAssetExporter, overlay.AssetGroup2, overlayBasePath, overlayZipPath, outputBasePath, endian);
+                    ExportOverlay($"{overlay.Id}d0l{i}", assetTypeCount, getAssetExporter, overlay.AssetGroup3, overlayBasePath, overlayZipPath, outputBasePath, endian);
                 }
             }
         }
 
         private static void ExportOverlay(
             string name,
-            int assetTypeCount, Func<int, Action<PreloadFile.OverlayAssetGroup, Stream, Endian, string>> getExporter,
+            int assetTypeCount, GetAssetExporterDelegate getAssetExporter,
             PreloadFile.OverlayAssetGroup[] assetGroups,
             string basePath, string zipPath,
             string outputBasePath,
@@ -190,39 +190,23 @@ namespace Gibbed.FGDK3.ExportPreload
                         continue;
                     }
 
-                    var export = getExporter(assetType);
-                    if (export == null)
+                    var (assetTypeName, assetExport) = getAssetExporter(assetType);
+
+                    if (string.IsNullOrEmpty(assetTypeName) == true)
                     {
-                        Console.WriteLine($"Exporter for type#{assetType} unavailable, aborting export for '{name}'.");
+                        assetTypeName = $"type#{assetType}";
+                    }
+
+                    if (assetExport == null)
+                    {
+                        Console.WriteLine($"Exporter for {assetTypeName} assets unavailable, aborting export for '{name}'.");
                         return;
                     }
 
-                    Console.WriteLine($"Exporting type#{assetType} assets from '{name}'...");
-                    export(assetGroup, input, endian, outputBasePath);
+                    Console.WriteLine($"Exporting {assetTypeName} assets from '{name}'...");
+                    assetExport(assetGroup, input, endian, outputBasePath);
                 }
             }
-        }
-
-        private static Action<PreloadFile.OverlayAssetGroup, Stream, Endian, string> GetDogsExporter(int assetType)
-        {
-            switch (assetType)
-            {
-                case 0: return AssetExporters.TextExporter.Export;
-                case 1: return AssetExporters.TextureExporter.Export;
-                case 3: return AssetExporters.ShapeExporter.Export;
-            }
-            return null;
-        }
-
-        private static Action<PreloadFile.OverlayAssetGroup, Stream, Endian, string> GetZooExporter(int assetType)
-        {
-            switch (assetType)
-            {
-                case 0: return AssetExporters.TextExporter.Export;
-                case 1: return AssetExporters.TextureExporter.Export;
-                case 2: return AssetExporters.ShapeExporter.Export;
-            }
-            return null;
         }
 
         private static Stream LoadOverlayFile(string name, string basePath, string zipPath)
